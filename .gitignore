@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+*.egg-info/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.conda/
+
+# Data and model artifacts
+data/raw/
+data/processed/
+data/wiki_dump/
+data/embeddings/
+checkpoints/
+outputs/
+indexes/
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.pkl
+*.arrow
+*.index
+*.faiss
+
+# Secrets
+.env
+secrets/
+*.key
+*.pem
+
+# Logs and tracking
+logs/
+wandb/
+runs/
+*.log
+
+# Scratch
+tmp/
+temp/
+scratch/
+
+# Editors and OS files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

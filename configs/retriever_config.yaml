@@ -1,0 +1,10 @@
+corpus_path: data/processed/corpus.jsonl
+bm25_index_dir: indexes/bm25
+dense_index_path: indexes/dense/wiki.faiss
+dense_metadata_path: indexes/dense/wiki.jsonl
+embedding_model: intfloat/multilingual-e5-base
+top_k: 5
+rrf_k: 60
+server:
+  host: 0.0.0.0
+  port: 5000
