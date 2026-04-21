@@ -284,7 +284,7 @@ bash scripts/run_ablations.sh
 
 ---
 
-## 📌 项目亮点（面向面试）
+## 📌 项目亮点
 
 - ✅ **端到端 Agentic RL 全链路**：数据合成 → SFT → Multi-turn GRPO → 评测 → 消融
 - ✅ **Retrieved Token Masking 自研实现**：解决 multi-turn RL 中梯度被检索内容污染的核心工程问题
@@ -313,9 +313,9 @@ bash scripts/run_ablations.sh
 
 ## 📬 联系方式
 
-- Author: **你的名字**
-- Email: your-email@example.com
-- 简历/博客链接: [your-portfolio-link]
+- Author: **zejian_cao**
+- Email: zejiang.cao@sjtu.edu.cn
+
 
 ---
 
