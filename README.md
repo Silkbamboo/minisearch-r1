@@ -290,28 +290,32 @@ MiniSearch-R1/
 ### 1. 环境准备
 
 ```bash
-git clone https://github.com/<Silkbamboo>/MiniSearch-R1.git
-cd MiniSearch-R1
+git clone https://github.com/<your-github-username>/minisearch-r1.git
+cd minisearch-r1
 
 conda create -n minisearch python=3.10 -y
 conda activate minisearch
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
 ### 2. 数据准备
 
 ```bash
-# 下载 benchmark
-python data/download_benchmarks.py
+# 下载多跳问答 benchmark
+python data/download_benchmarks.py --dataset hotpotqa
+python data/download_benchmarks.py --dataset 2wiki
+python data/download_benchmarks.py --dataset musique
+python data/download_benchmarks.py --dataset bamboogle
 
-# 下载 Wikipedia / KILT 语料
+# 下载 Wikipedia / KILT 检索语料
 python data/download_wiki.py
 
-# 合成 SFT 冷启动数据
+# 合成 SFT 冷启动数据（需要配置 API Key）
 python data/synthesize_sft_data.py --n_samples 500
 
-# 按 hop 数拆分课程学习数据
-python data/split_by_hops.py
+# 构建课程学习数据
+python data/split_by_hops.py --input data/processed/train.jsonl --output-dir data/processed/hops
 ```
 
 ### 3. 检索服务
@@ -324,24 +328,24 @@ python retriever/build_bm25_index.py
 python retriever/build_dense_index.py
 
 # 启动检索服务
-python retriever/server.py
+python retriever/server.py --host 0.0.0.0 --port 8000
 ```
 
 ### 4. 训练
 
 ```bash
 # SFT 冷启动
-python training/sft_cold_start.py --config configs/sft.yaml
+python training/sft_cold_start.py --config configs/sft.yaml --output_dir outputs/sft
 
 # Multi-turn GRPO
-python training/grpo_train.py --config configs/grpo.yaml
+python training/grpo_train.py --config configs/grpo.yaml --init_checkpoint outputs/sft
 ```
 
 ### 5. 评测
 
 ```bash
 # 批量评测
-python evaluation/evaluate.py --checkpoint outputs/grpo_final
+python evaluation/evaluate.py --checkpoint outputs/grpo_final --split test
 
 # 消融实验
 bash scripts/run_ablations.sh
@@ -368,13 +372,13 @@ bash scripts/run_ablations.sh
 
 ---
 
-<!-- ## 项目亮点
+## 项目亮点（面向面试）
 
-- **方向契合度高**：覆盖 Search Agent、Agentic RAG、多轮推理强化学习等大模型热点方向
-- **算法问题明确**：围绕 reward sparsity、检索召回、多轮推理稳定性展开
-- **方法设计完整**：从课程学习、混合检索到过程奖励形成相对完整的方法闭环
-- **工程实现清晰**：训练、检索、评测模块分离，具备复现实验和扩展系统的工程基础
-- **研究表达友好**：便于从问题定义、方法设计、实验验证、失败案例四个维度向面试官讲述 -->
+- **问题定义明确**：聚焦小模型在多轮搜索推理中的核心难点，包括 reward sparsity、检索召回与推理链稳定性
+- **方法设计成体系**：围绕课程学习、混合检索、过程奖励三条主线展开，逻辑清晰，便于做实验验证与归因分析
+- **算法与系统结合紧密**：不仅关注训练目标和奖励设计，也覆盖检索服务、索引构建、数据组织与评测链路
+- **具备完整实验视角**：包含主实验、消融实验、训练曲线与案例分析，能够较系统地说明方法有效性
+- **适合展开技术表达**：可以从任务背景、方法动机、工程实现、实验分析四个维度向面试官完整讲述
 
 ---
 
