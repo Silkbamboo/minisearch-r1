@@ -14,7 +14,7 @@
 
 </div>
 
-> **一句话概括**  
+
 > MiniSearch-R1 关注的不是“给模型外挂检索器”，而是让模型在推理过程中学会 **何时检索、检索什么、如何利用检索结果继续推理**。
 
 ---
@@ -95,7 +95,7 @@
 
 ---
 
-## 方法设计
+## 🔥 核心方法设计
 
 ### 1. 课程学习（Curriculum Learning）
 
@@ -285,12 +285,12 @@ MiniSearch-R1/
 
 ---
 
-## 快速开始
+## 🚀 快速开始
 
 ### 1. 环境准备
 
 ```bash
-git clone https://github.com/<your-username>/MiniSearch-R1.git
+git clone https://github.com/<Silkbamboo>/MiniSearch-R1.git
 cd MiniSearch-R1
 
 conda create -n minisearch python=3.10 -y
@@ -368,13 +368,13 @@ bash scripts/run_ablations.sh
 
 ---
 
-## 项目亮点（面向面试）
+<!-- ## 项目亮点
 
 - **方向契合度高**：覆盖 Search Agent、Agentic RAG、多轮推理强化学习等大模型热点方向
 - **算法问题明确**：围绕 reward sparsity、检索召回、多轮推理稳定性展开
 - **方法设计完整**：从课程学习、混合检索到过程奖励形成相对完整的方法闭环
 - **工程实现清晰**：训练、检索、评测模块分离，具备复现实验和扩展系统的工程基础
-- **研究表达友好**：便于从问题定义、方法设计、实验验证、失败案例四个维度向面试官讲述
+- **研究表达友好**：便于从问题定义、方法设计、实验验证、失败案例四个维度向面试官讲述 -->
 
 ---
 
