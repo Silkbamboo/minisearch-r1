@@ -56,7 +56,7 @@
 - **方法改进清晰**：围绕课程学习、混合检索、过程奖励三条主线展开，便于做可解释分析与消融
 - **任务链路完整**：覆盖数据准备、检索服务、SFT、GRPO、评测与案例分析，形成较完整的 Agentic RL 工程闭环
 - **研究与工程并重**：既关注 reward design、训练稳定性、多跳推理能力，也重视检索服务、索引构建与评测组织
-- **面向真实场景**：问题设定直接对应搜索推理型大模型能力，与 Search Agent / Deep Research 类方向高度相关
+
 
 ---
 
@@ -94,7 +94,7 @@
 
 ---
 
-## 🔥 核心方法设计
+## 🔥 方法设计
 
 ### 1. 课程学习（Curriculum Learning）
 
@@ -141,7 +141,7 @@ $$
 
 ---
 
-## 实验设计
+## 🔬 实验设计
 
 ### Benchmark
 
@@ -391,9 +391,9 @@ bash scripts/run_ablations.sh
 
 ## 联系方式
 
-- Author: **待补充**
-- Email: `待补充`
-- Blog / Portfolio: `待补充`
+- Author: Zejiang_cao
+- Email: zejiang.cao@sjtu.edu.cn
+
 
 ---
 
