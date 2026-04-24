@@ -32,10 +32,25 @@ def load_config(path: str) -> dict:
         return yaml.safe_load(src)
 
 
+def validate_paths(config: dict) -> list[str]:
+    warnings = []
+    train_file = Path(config["train_file"])
+    eval_file = Path(config["eval_file"])
+    if not train_file.exists():
+        warnings.append(f"Missing train file: {train_file}")
+    if not eval_file.exists():
+        warnings.append(f"Missing eval file: {eval_file}")
+    for stage in build_default_curriculum():
+        if not stage.dataset_path.exists():
+            warnings.append(f"Missing curriculum file: {stage.dataset_path}")
+    return warnings
+
+
 def main() -> None:
     args = parse_args()
     config = load_config(args.config)
     curriculum = build_default_curriculum()
+    warnings = validate_paths(config)
 
     print(f"Loaded config: {args.config}")
     print(f"Model path: {config['model_name_or_path']}")
@@ -44,6 +59,8 @@ def main() -> None:
     print("Curriculum stages:")
     for stage in curriculum:
         print(f"- {stage.name}: {stage.dataset_path}")
+    for warning in warnings:
+        print(f"WARNING: {warning}")
 
     if args.dry_run:
         print("Dry run complete. No training started.")

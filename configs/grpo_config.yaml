@@ -3,26 +3,55 @@ model_name_or_path: checkpoints/sft
 output_dir: checkpoints/grpo
 train_file: data/processed/grpo_train.jsonl
 eval_file: data/processed/grpo_eval.jsonl
-retriever_endpoint: http://127.0.0.1:5000/search
+retriever_endpoint: http://127.0.0.1:8000/retrieve
 max_steps: 500
 max_seq_length: 2048
 load_in_4bit: true
 
 rollout:
-  max_turns: 4
-  retrieval_top_k: 5
+  max_turns: 3
+  retrieval_top_k: 3
   temperature: 0.7
   top_p: 0.9
 
 reward:
   answer_weight: 1.0
   format_weight: 0.2
-  retrieval_weight: 0.3
+  search_weight: 0.1
 
 trainer:
   per_device_train_batch_size: 1
-  gradient_accumulation_steps: 8
-  learning_rate: 1.0e-5
+  gradient_accumulation_steps: 4
+  num_generations: 8
+  max_prompt_length: 512
+  max_completion_length: 1536
+  learning_rate: 5.0e-6
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.1
+  optim: paged_adamw_8bit
+  bf16: true
+  max_grad_norm: 0.1
+  weight_decay: 0.1
   logging_steps: 5
   save_steps: 50
   eval_steps: 50
+
+grpo:
+  loss_type: dapo
+  epsilon: 0.2
+  epsilon_high: 0.28
+  beta: 0.0
+  mask_truncated_completions: true
+
+lora:
+  r: 16
+  lora_alpha: 16
+  lora_dropout: 0
+  target_modules:
+    - q_proj
+    - k_proj
+    - v_proj
+    - o_proj
+    - gate_proj
+    - up_proj
+    - down_proj

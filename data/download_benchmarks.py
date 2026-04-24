@@ -14,6 +14,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--name", default="hotpotqa", help="Logical dataset name.")
     parser.add_argument("--split", default="train", help="Dataset split to save.")
     parser.add_argument(
+        "--limit",
+        type=int,
+        default=0,
+        help="Optional number of rows to keep for local development.",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Shuffle seed applied before an optional limit.",
+    )
+    parser.add_argument(
         "--output",
         default="data/raw/hotpotqa_train.jsonl",
         help="Target JSONL path.",
@@ -34,6 +46,8 @@ def main() -> None:
     args = parse_args()
     dataset_spec = resolve_dataset(args.name)
     dataset = load_dataset(*dataset_spec, split=args.split)
+    if args.limit and args.limit > 0:
+        dataset = dataset.shuffle(seed=args.seed).select(range(min(args.limit, len(dataset))))
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)

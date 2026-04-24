@@ -25,6 +25,9 @@ def infer_hops(example: dict[str, Any]) -> int:
     if "num_hops" in example:
         return int(example["num_hops"])
     supporting = example.get("supporting_facts")
+    # HuggingFace datasets format: {"title": [...], "sent_id": [...]}
+    if isinstance(supporting, dict) and "title" in supporting:
+        return max(1, min(4, len(set(supporting["title"]))))
     if isinstance(supporting, list) and supporting:
         return max(1, min(4, len(supporting)))
     context = example.get("context")

@@ -10,8 +10,13 @@ from typing import Any
 
 
 SYSTEM_PROMPT = (
-    "You are a retrieval-augmented reasoning assistant. "
-    "Think step by step, decide when retrieval is needed, then answer precisely."
+    "Answer the given question. You must conduct reasoning inside <think> "
+    "and </think> first every time you get new information. After reasoning, if you find you "
+    "lack some knowledge, you can call a search engine by <search> query </search>, and it "
+    "will return the top searched results between <information> and </information>. You can "
+    "search as many times as you want. If you find no further external knowledge needed, you "
+    "can directly provide the answer inside <answer> and </answer> without detailed "
+    "illustrations. For example, <answer> xxx </answer>."
 )
 
 
@@ -37,11 +42,7 @@ def convert_example(example: dict[str, Any]) -> dict[str, Any]:
     question = extract_question(example)
     answer = extract_answer(example)
     assistant = (
-        "<plan>\n"
-        "1. Identify the information required.\n"
-        "2. Retrieve evidence if necessary.\n"
-        "3. Produce the final answer.\n"
-        "</plan>\n"
+        "<think>Let me find information to answer this question.</think>\n"
         f"<answer>{answer}</answer>"
     )
     return {
