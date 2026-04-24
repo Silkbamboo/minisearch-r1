@@ -21,7 +21,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Start a local retriever service.")
     parser.add_argument("--corpus", default="data/processed/corpus.jsonl")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=5000)
+    parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--top-k", type=int, default=5)
     return parser.parse_args()
 
@@ -70,14 +70,18 @@ def create_app(corpus: list[dict], top_k: int) -> Flask:
     def health():
         return jsonify({"ok": True, "documents": len(corpus)})
 
-    @app.post("/search")
-    def search():
+    @app.post("/retrieve")
+    def retrieve():
         payload = request.get_json(force=True, silent=True) or {}
         query = str(payload.get("query", "")).strip()
         lexical = lexical_search(query, corpus, top_k)
         dense = dense_stub(query, corpus, top_k)
         fused = reciprocal_rank_fusion([lexical, dense])[:top_k]
-        return jsonify({"query": query, "results": fused})
+        results = [
+            {"docid": r["doc_id"], "score": r["score"], "contents": r["text"]}
+            for r in fused
+        ]
+        return jsonify({"query": query, "results": results})
 
     return app
 
