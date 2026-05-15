@@ -1,5 +1,5 @@
 run_name: grpo-qwen2.5-1.5b
-model_name_or_path: checkpoints/sft
+model_name_or_path: checkpoints/sft/final
 output_dir: checkpoints/grpo
 train_file: data/processed/grpo_train.jsonl
 eval_file: data/processed/grpo_eval.jsonl

@@ -21,11 +21,10 @@ lora:
 
 training:
   per_device_train_batch_size: 2
-  gradient_accumulation_steps: 8
+  gradient_accumulation_steps: 4     # effective batch size = 8
   learning_rate: 2.0e-4
-  num_train_epochs: 1
-  warmup_ratio: 0.03
-  logging_steps: 10
-  save_steps: 100
-  eval_steps: 100
+  num_train_epochs: 3                # 500 条小数据的经验甜点
+  warmup_ratio: 0.1                  # lr=2e-4 需要较长 warmup
+  logging_steps: 5
   seed: 42
+# eval/save 都走 epoch 粒度,见 docs/m4.md 坑点 4

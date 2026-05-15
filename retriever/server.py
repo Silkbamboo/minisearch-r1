@@ -74,9 +74,10 @@ def create_app(corpus: list[dict], top_k: int) -> Flask:
     def retrieve():
         payload = request.get_json(force=True, silent=True) or {}
         query = str(payload.get("query", "")).strip()
+        req_topk = int(payload.get("topk", top_k))
         lexical = lexical_search(query, corpus, top_k)
         dense = dense_stub(query, corpus, top_k)
-        fused = reciprocal_rank_fusion([lexical, dense])[:top_k]
+        fused = reciprocal_rank_fusion([lexical, dense])[:req_topk]
         results = [
             {"docid": r["doc_id"], "score": r["score"], "contents": r["text"]}
             for r in fused

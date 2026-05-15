@@ -1,483 +1,264 @@
-# MiniSearch-R1 项目 AI Agent 指引文档
+# MiniSearch-R1 项目操作指南
 
-> 本文档同时作为 `CLAUDE.md`（Claude Code）和 `AGENTS.md`（Codex）使用。
-> 任何 AI 编码 Agent 在本项目中执行任务前，**必须先阅读本文档全文**。
-
----
-
-## 一、项目全局定义（不可偏离）
-
-### 1.1 一句话定义
-
-MiniSearch-R1 是一个**搜索增强推理 Agent**：在 Qwen2.5-1.5B-Instruct 上，通过 GRPO 强化学习（DAPO loss 变体），训练模型学会在推理过程中**自主决定何时搜索、搜索什么、如何利用搜索结果**，最终在多跳 QA 任务上提升准确率。
-
-### 1.2 对标论文（权威参考源）
-
-| 论文 | 作用 | 关键点 |
-|------|------|--------|
-| **Search-R1** (arXiv:2503.09516) | 主复现论文 | 多轮搜索交互 + GRPO + retrieved token masking |
-| **R1-Searcher** (arXiv:2503.05592) | 辅助参考 | 两阶段 RL + 极少量训练数据(350条) |
-| **DAPO** (arXiv:2503.14476) | RL 算法改进 | Clip-Higher + Dynamic Sampling + Token-level Loss + Overlong Filtering |
-
-### 1.3 硬约束（红线，任何代码修改都不能违反）
-
-```
-基座模型:       Qwen2.5-1.5B-Instruct（不要换成其他模型）
-量化方式:       4-bit QLoRA（r=16, lora_alpha=16）
-RL 算法:        GRPO with DAPO loss（loss_type="dapo"）
-训练框架:       Unsloth + TRL GRPOTrainer（不用 veRL）
-检索方案:       本地 Wikipedia BM25 + E5-base-v2 + RRF 融合
-训练硬件:       单卡 RTX 3090 24GB（AutoDL）
-总预算:         ≤ ¥100 GPU 费用
-显存上限:       24GB（所有配置必须在此范围内运行）
-Python 版本:    3.10
-```
-
-### 1.4 不做什么（负面清单）
-
-- **不要**使用 veRL / Ray 分布式训练（我们是单卡）
-- **不要**使用 PPO（需要额外 Value Model，显存不够）
-- **不要**调用外部搜索 API（如 Google/Bing）——只用本地检索服务器
-- **不要**使用 LLM-as-Judge 做 reward（成本不可控）
-- **不要**训练独立的 Reward Model 或 Process Reward Model
-- **不要**修改 Qwen2.5-1.5B 的基座权重（只训练 LoRA）
-- **不要**使用 `localStorage`/`sessionStorage`（如涉及前端）
-- **不要**安装 apex 或其他非必要的 CUDA 编译包
+> 本文档同时作为 `AGENTS.md`（Codex / 通用 Agent）与 `CLAUDE.md`（Claude Code）使用，两份文件内容保持同步。  
+> 任何 AI Agent 在修改本项目之前，都应先阅读本文档全文。
 
 ---
 
-## 二、项目目录结构（严格遵守）
+## 1. 项目北极星
 
-```
-MiniSearch-R1/
-├── AGENTS.md                    # ← 本文件（Claude Code / Codex 指引）
-├── README.md                    # 项目介绍
-├── requirements.txt             # Python 依赖
-├── .gitignore
-│
-├── configs/                     # 所有超参数配置
-│   ├── sft_config.yaml          # SFT 冷启动配置
-│   ├── grpo_stage1.yaml         # GRPO 阶段1（简单）
-│   ├── grpo_stage2.yaml         # GRPO 阶段2（中等）
-│   └── grpo_stage3.yaml         # GRPO 阶段3（困难）
-│
-├── data/                        # 数据处理
-│   ├── download_datasets.py     # 下载 HotpotQA/MuSiQue/2Wiki/Bamboogle
-│   ├── preprocess.py            # 统一格式化为 Search-R1 parquet 格式
-│   ├── curriculum_split.py      # 按难度分三级课程
-│   └── generate_sft_data.py     # 用 DeepSeek API 生成 SFT 冷启动轨迹
-│
-├── retrieval/                   # 检索服务
-│   ├── build_bm25_index.py      # Pyserini BM25 索引构建
-│   ├── build_dense_index.py     # E5-base-v2 FAISS 索引构建
-│   ├── server.py                # FastAPI 混合检索服务器（BM25+E5+RRF）
-│   └── test_retrieval.py        # 检索服务单元测试
-│
-├── training/                    # 训练代码
-│   ├── sft_train.py             # SFT 冷启动训练
-│   ├── grpo_train.py            # GRPO/DAPO 主训练脚本
-│   ├── search_env.py            # 多轮搜索环境（environment_factory）
-│   ├── rewards.py               # 所有 reward 函数
-│   └── utils.py                 # 工具函数（token masking 等）
-│
-├── evaluation/                  # 评测代码
-│   ├── evaluate.py              # 统一评测脚本
-│   ├── metrics.py               # EM / F1 / 搜索效率指标
-│   ├── ablation_runner.py       # 消融实验批量运行器
-│   └── case_analysis.py         # 定性案例分析
-│
-├── scripts/                     # 运维脚本
-│   ├── setup_autodl.sh          # AutoDL 环境一键部署
-│   ├── start_retrieval.sh       # 启动检索服务器
-│   ├── run_full_pipeline.sh     # 完整 pipeline 一键运行
-│   └── auto_shutdown.py         # 训练完自动关机（省预算）
-│
-└── outputs/                     # 训练产出（git ignore）
-    ├── sft_checkpoint/
-    ├── grpo_stage1/
-    ├── grpo_stage2/
-    ├── grpo_stage3/
-    ├── eval_results/
-    └── ablation_results/
-```
+### 一句话定义
 
-**规则**：新建文件必须放在对应目录下，不要在根目录散落脚本。
+MiniSearch-R1 是一个**面向 Search Agent 的小模型搜索增强强化学习项目**：在 **Qwen2.5-1.5B-Instruct** 上验证 **multi-turn retrieval + GRPO** 的训练可行性，并围绕 **课程学习、混合检索、过程奖励** 做系统探索。
+
+### 面向对象
+
+这个项目首先是给 **大模型算法实习面试官** 看的，其次才是给开源社区看的。
+
+因此，项目的核心目标不是“尽可能大而全”，而是：
+
+- **可解释**：为什么做这个问题，为什么这样设计
+- **可复现**：别人能看懂代码结构和实验路径
+- **可讲述**：你能在 5-10 分钟内把项目完整讲明白
 
 ---
 
-## 三、核心技术规范
+## 2. 这个项目不追求什么
 
-### 3.1 搜索交互协议（标签格式）
+以下方向默认不作为优先目标：
 
-模型在推理过程中使用以下特殊标签与检索环境交互：
+- 不是做一个通用 Agent 框架
+- 不是做一个覆盖所有检索器和 RL 算法的大而全平台
+- 不是优先追求“论文级最完整复现”
+- 不是优先追求“把所有 benchmark 和所有消融全部跑满”
+- 不是做前端产品或 Demo 网站
 
-```
-<think>我需要查找关于 X 的信息</think>
-<search>X related query</search>
-<information>
-[1] 检索结果文本 1...
-[2] 检索结果文本 2...
-[3] 检索结果文本 3...
-</information>
-<think>根据检索结果，我现在知道...</think>
-<answer>最终答案</answer>
-```
+一句话说，本项目追求的是：
 
-**关键规则**：
-- `<search>` 和 `</search>` 之间是模型生成的查询，必须是**单行纯文本**
-- `<information>` 和 `</information>` 之间是**环境注入的检索结果**，不是模型生成的
-- `<answer>` 和 `</answer>` 之间是**最终答案**，必须简洁（通常是一个实体/短语）
-- 最大搜索轮次：**3 次**（超过后强制要求回答）
-- 每次检索返回 **top-3** passages，每条最多 **500 字符**
-
-### 3.2 System Prompt（不要修改）
-
-```python
-SYSTEM_PROMPT = """Answer the given question. You must conduct reasoning inside <think> \
-and </think> first every time you get new information. After reasoning, if you find you \
-lack some knowledge, you can call a search engine by <search> query </search>, and it \
-will return the top searched results between <information> and </information>. You can \
-search as many times as you want. If you find no further external knowledge needed, you \
-can directly provide the answer inside <answer> and </answer> without detailed \
-illustrations. For example, <answer> xxx </answer>.
-Question: {question}"""
-```
-
-### 3.3 Retrieved Token Masking 规范
-
-在 RL loss 计算中，`<information>...</information>` 标签内的所有 token 的 loss mask 必须设为 0：
-
-```python
-# 正确 ✅：只对模型生成的 token 计算梯度
-active_mask = completion_mask * retrieval_mask  # 两者都为 1 才有效
-loss = masked_loss.sum() / (active_mask.sum() + 1e-8)
-
-# 错误 ❌：对全序列计算梯度（包括检索内容）
-loss = total_loss.mean()
-```
-
-### 3.4 Reward 函数规范
-
-```python
-# 主 reward：F1 Score（连续值 0-1，优于二值 EM）
-def f1_reward(completions, ground_truth, **kwargs) -> list[float]:
-    # 必须使用 SQuAD 标准归一化：lowercase + 去冠词 + 去标点 + 去多余空格
-    ...
-
-# 辅助 reward 1：格式正确性（二值 0/1）
-def format_reward(completions, **kwargs) -> list[float]:
-    # 检查 <answer> 标签是否存在且 <search> 标签是否成对
-    ...
-
-# 辅助 reward 2：搜索质量（0/0.1/0.3）
-def search_quality_reward(completions, ground_truth, **kwargs) -> list[float]:
-    # 答对 + 搜索次数 ≤ 3 → 0.3；答对 + 搜索次数 > 3 → 0.1；答错 → 0
-    ...
-
-# 组合权重
-reward_weights = [1.0, 0.2, 0.1]  # [f1, format, search_quality]
-```
-
-### 3.5 GRPO/DAPO 超参数（已调优，不要随意修改）
-
-```yaml
-# === 这些参数已针对 3090 24GB + Qwen2.5-1.5B 调优 ===
-loss_type: "dapo"
-epsilon: 0.2                      # ε_low（标准裁剪下界）
-epsilon_high: 0.28                # ε_high（Clip-Higher 非对称上界）
-beta: 0.0                         # 无 KL 惩罚（RLVR 不需要）
-mask_truncated_completions: true  # Overlong Filtering
-
-per_device_train_batch_size: 1
-gradient_accumulation_steps: 4    # 有效 batch = 4
-num_generations: 8                # 每 prompt 采样 G=8 个 completion
-max_prompt_length: 512
-max_completion_length: 1536       # 总长 2048 = 512 + 1536
-
-learning_rate: 5e-6
-lr_scheduler_type: "cosine"
-warmup_ratio: 0.1
-optim: "paged_adamw_8bit"
-bf16: true
-max_grad_norm: 0.1
-weight_decay: 0.1
-
-# LoRA
-r: 16
-lora_alpha: 16                    # scaling = alpha/r = 1.0
-target_modules: ["q_proj","k_proj","v_proj","o_proj","gate_proj","up_proj","down_proj"]
-lora_dropout: 0
-```
-
-**如果需要调参**：只允许调 `learning_rate`（范围 1e-6 ~ 1e-5）、`num_generations`（4 或 8）、`max_steps`。其他参数不动。
-
-### 3.6 课程学习三阶段
-
-```
-阶段 1（stage1_easy）  → HotpotQA level=easy           → 300 步
-阶段 2（stage2_medium）→ HotpotQA level=medium + MuSiQue 2hop → 500 步
-阶段 3（stage3_hard）  → HotpotQA level=hard + MuSiQue 3-4hop → 700 步
-```
-
-每个阶段从上一阶段 checkpoint 继续训练（`resume_from_checkpoint`）。
+> 用尽量清晰、可信、可复现的方式，完成一个适合算法岗面试展示的 Search Agent 项目。
 
 ---
 
-## 四、检索服务器规范
+## 3. 成功标准
 
-### 4.1 接口定义
+一个改动是否有价值，优先看它是否提升以下三件事：
 
-检索服务器运行在 `http://127.0.0.1:8000`，提供单一接口：
+### 3.1 可解释
 
-```
-POST /retrieve
-Content-Type: application/json
+- 项目问题定义是否更清晰
+- 方法设计是否有明确动机
+- 模块边界是否更容易说明
 
-Request:  {"query": "string", "topk": 3}
-Response: {"query": "string", "results": [{"docid": "str", "score": float, "contents": "str"}, ...]}
-```
+### 3.2 可复现
 
-### 4.2 RRF 融合公式
+- 配置、数据、训练、评测流程是否更清楚
+- 本地 smoke test 和远端 full train 是否分层明确
+- 脚本入口是否稳定、统一、可重复执行
 
-```python
-score(d) = Σ_i 1 / (k + rank_i(d))   # k = 60
-```
+### 3.3 可讲述
 
-BM25 和 E5 各取 top-100，RRF 融合后返回 top-3。
-
-### 4.3 依赖服务
-
-训练前必须确保检索服务器已启动。训练脚本中应包含健康检查：
-
-```python
-import requests
-try:
-    r = requests.post("http://127.0.0.1:8000/retrieve",
-                       json={"query": "test", "topk": 1}, timeout=5)
-    assert r.status_code == 200
-except:
-    raise RuntimeError("检索服务器未启动！先运行: bash scripts/start_retrieval.sh")
-```
+- 是否更容易组织成面试叙事
+- 是否更容易形成“问题 → 方法 → 实验 → 结论”的结构
+- 是否更容易回答面试官追问
 
 ---
 
-## 五、数据格式规范
+## 4. 项目硬边界
 
-### 5.1 训练数据 Parquet 格式
+### 固定不变的主设定
 
-每条记录必须包含以下字段：
+- 基座模型：`Qwen2.5-1.5B-Instruct`
+- 任务形态：`multi-turn retrieval + reasoning`
+- 训练主线：`SFT 冷启动 + GRPO`
+- 核心改进：`课程学习 / 混合检索 / 过程奖励`
+- 目标场景：`Search Agent / Agentic RAG`
 
-```python
-{
-    "data_source": "hotpotqa",                          # 数据集来源
-    "prompt": [{"role": "user", "content": "问题文本"}],  # 单轮对话格式
-    "ability": "fact-reasoning",                        # 固定值
-    "reward_model": {
-        "style": "rule",
-        "ground_truth": "标准答案"                        # 字符串或字符串列表
-    },
-    "extra_info": {
-        "split": "train",
-        "index": 0,
-        "level": "easy",                                # 课程难度标签
-        "hop_count": 2                                  # 跳数
-    }
-}
-```
+### 原则上不主动扩展的范围
 
-### 5.2 SFT 冷启动数据格式
+- 不切换到更大基座模型作为主线
+- 不把项目改造成通用 Web Search 产品
+- 不引入分布式训练框架作为主路径
+- 不为了”显得高级”而堆积过多复杂组件
 
-```python
-{
-    "messages": [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": "问题"},
-        {"role": "assistant", "content": "<think>...<search>...</search>\n<information>...</information>\n...</think>\n<answer>答案</answer>"}
-    ]
-}
-```
+### 三项核心设计改进（问题意识 → 方法 → 实验变量）
 
-### 5.3 评测结果输出格式
+这三项改进是本项目与”单纯复现 Search-R1”的核心差异，每一项都有明确的问题动机和可验证的消融变量。
 
-```json
-{
-    "model": "minisearch_r1_stage3",
-    "dataset": "hotpotqa_dev",
-    "metrics": {"em": 0.35, "f1": 0.42, "avg_searches": 1.8},
-    "num_samples": 500,
-    "timestamp": "2025-xx-xx"
-}
-```
+#### 改进 1：课程学习
+
+- **问题意识**：Search-R1 用混合难度数据直接训练。1.5B 小模型在多跳题上冷启动 reward 极度稀疏（初始 EM ≈ 3%），训练前 100 步几乎拿不到信号，容易进入”无效搜索循环”的稳定策略。
+- **设计改进**：三阶段难度递进（easy → medium → hard），让模型先在单跳题上建立基础奖励信号，再迁移到多跳推理，每阶段从上一阶段 checkpoint 继续训练。
+- **实验变量**：w/ curriculum vs w/o curriculum（相同步数 budget，比较 reward 收敛曲线和最终 EM）
+
+#### 改进 2：混合检索（BM25 + Dense + RRF）
+
+- **问题意识**：BM25 在语义查询（别名、同义词、模糊实体）上召回率低，影响多跳推理第二步的搜索质量（第一跳找到实体 A，第二跳需要语义搜索 A 的属性时 BM25 容易失效）。
+- **设计改进**：BM25 + E5-base-v2 Dense Retrieval + RRF 融合（k=60），两路各取 top-100 → RRF → top-3，兼顾精确匹配与语义召回。
+- **实验变量**：BM25-only vs BM25+Dense+RRF（检索命中率 Hit@3 + 最终 EM/F1 对比）
+
+#### 改进 3：过程奖励（Format + Search Quality）
+
+- **问题意识**：纯 EM/F1 reward 对 1.5B 小模型在训练初期几乎全为 0，GRPO 的组内 advantage 归零，无有效梯度，容易在冷启动阶段崩溃。
+- **设计改进**：在 F1 主 reward 基础上加入 format reward（格式合规性）和 search quality reward（答对+搜索次数 ≤ 3 → 0.3，> 3 → 0.1，答错 → 0），为中间正确步骤提供连续密集信号。
+- **实验变量**：F1-only vs F1+Format+SearchQuality（训练稳定性和 reward 收敛速度对比，前 200 步曲线尤其关键）
 
 ---
 
-## 六、常见陷阱与排错指南
+## 5. 本地与 AutoDL 的职责划分
 
-### 6.1 显存 OOM
+### 本地机器
 
-| 现象 | 原因 | 解决 |
+本地只负责低资源开发与验证：
+
+- 写代码
+- 小样本数据处理
+- 检索服务 smoke test
+- SFT / GRPO 的最小链路验证
+- 文档整理和结果分析
+
+本地默认不做：
+
+- 全量 KILT 语料处理
+- 全量 BM25 / Dense 索引
+- 正式长时间训练
+- 大显存或大磁盘占用操作
+
+### AutoDL
+
+AutoDL 负责高资源执行：
+
+- 全量语料处理
+- 正式 BM25 / Dense / FAISS 索引构建
+- 正式 SFT
+- 正式 GRPO
+- 长时间评测和消融实验
+
+原则：
+
+> 本地验证“链路正确”，AutoDL验证“规模可行”。
+
+---
+
+## 6. 项目优先级
+
+默认优先级按以下顺序推进：
+
+### P0：最小可运行链路
+
+- 小样本数据准备
+- 本地检索服务可用
+- SFT smoke test 可启动
+- GRPO smoke test 可启动
+
+### P1：可信 baseline
+
+- 正式 SFT baseline
+- 真实 BM25 baseline
+- 最小 GRPO baseline
+
+### P2：方法改进
+
+- 课程学习
+- 混合检索
+- 过程奖励
+
+### P3：实验与展示
+
+- 主实验结果
+- 关键消融
+- case study
+- README / docs / 面试讲稿
+
+如果出现取舍，优先保证：
+
+- baseline 跑通
+- 实验链路清楚
+- 文档能讲明白
+
+---
+
+## 7. M1-M7 统一定义
+
+| 里程碑 | 核心问题 | 交付重点 |
 |------|------|------|
-| GRPO 训练 OOM | num_generations 过大 | 降为 4，或降低 max_completion_length 到 1024 |
-| vLLM 推理 OOM | gpu_memory_utilization 过高 | 从 0.6 降到 0.5 |
-| SFT 训练 OOM | batch_size 过大 | per_device_train_batch_size=2，gradient_accumulation=4 |
+| **M1** | 工程工作流是否成立 | 本地 / GitHub / AutoDL 工作流 |
+| **M2** | 小样本数据链路是否成立 | benchmark 子集、训练数据、dev corpus |
+| **M3** | 检索基线是否可信 | BM25 baseline，之后再接 Dense / RRF |
+| **M4** | 模型是否学会工具使用格式 | SFT 冷启动 |
+| **M5** | 多轮搜索环境和奖励是否可计算 | rollout / masking / rewards |
+| **M6** | 多轮搜索强化学习是否可训练 | GRPO 主训练与课程学习 |
+| **M7** | 项目能否转化为面试证据 | 评测、消融、README、讲述材料 |
 
-### 6.2 搜索标签解析失败
+所有文档与代码修改，都应能回答：
 
-```python
-# 鲁棒的标签提取（处理不完整标签）
-import re
-def extract_search_query(text):
-    match = re.search(r'<search>(.*?)(?:</search>|$)', text, re.DOTALL)
-    return match.group(1).strip() if match else None
-
-def extract_answer(text):
-    match = re.search(r'<answer>(.*?)(?:</answer>|$)', text, re.DOTALL)
-    return match.group(1).strip() if match else ""
-```
-
-### 6.3 Reward 全为零
-
-如果一个 batch 内所有 rollout 的 reward 都是 0，GRPO 的优势全为零，无有效梯度。解决：
-- 确保 SFT 冷启动已完成（模型至少会生成正确格式）
-- 课程学习从最简单的问题开始
-- 检查答案归一化是否正确（常见 bug：未去除标点导致永远不匹配）
-
-### 6.4 检索服务器崩溃
-
-FAISS 索引**文件**约 90GB（29M × 768 dim × 4 bytes）。用 `np.memmap` 懒加载，
-**驻内存约 15-20GB**（passage 原文 dict ~10GB + JVM + E5 模型 + 索引元数据）。
-如果 AutoDL 实例内存/磁盘不够：
-- 改用 `IndexIVFPQ` 压缩索引，磁盘可压到 ~15GB，精度下降 2-3%
-- 或仅使用 BM25（不用 Dense 检索），将混合检索作为消融实验
-
-### 6.5 Unsloth 版本兼容性
-
-```bash
-# 必须使用的版本组合（已验证）
-pip install unsloth
-pip install trl>=0.17
-pip install transformers>=4.45
-pip install vllm==0.6.3
-```
-
-如果 Unsloth 与 vLLM 版本冲突，优先保证 Unsloth 版本正确。
+- 当前改动属于哪个里程碑
+- 解决了哪个问题
+- 最终会给面试官呈现什么证据
 
 ---
 
-## 七、代码风格规范
+## 8. 对 AI Agent 的要求
 
-### 7.1 通用规则
+### 8.1 先做最小闭环，再做增强
 
-- 所有代码文件顶部必须有 docstring 说明用途
-- 使用 `typing` 做类型标注
-- 配置使用 YAML 文件，不要硬编码在 Python 中
-- 训练脚本必须支持 `--config` 参数加载配置
-- 所有路径使用 `pathlib.Path`，不要硬编码绝对路径
-- 日志使用 `logging` 模块，不要用 `print`
+默认顺序是：
 
-### 7.2 命名约定
+1. 先做能跑通的 baseline
+2. 再做更强的版本
+3. 再做更复杂的实验
 
-```python
-# 文件名：snake_case
-grpo_train.py, search_env.py, rewards.py
+不要直接跳到“大而全”的最终形态。
 
-# 类名：PascalCase
-class SearchEnv: ...
-class RetrievalServer: ...
+### 8.2 配置驱动优先
 
-# 函数/变量：snake_case
-def f1_reward(): ...
-def create_retrieval_mask(): ...
-```
+- 尽量把实验差异放在 `configs/` 中
+- 训练入口脚本保持稳定
+- 本地和 AutoDL 使用同一脚本入口，但允许不同执行路径
 
-### 7.3 Git 提交规范
+### 8.3 文档服务于叙事，不服务于堆砌
 
-```
-feat: 添加 RRF 混合检索融合
-fix: 修复 token masking 边界条件
-exp: 完成消融实验 A（课程学习）
-data: 生成 stage2 训练数据
-docs: 更新 README 评测结果
-```
+文档不追求“写满”，而追求：
 
----
+- 目标明确
+- 范围清楚
+- 输出物具体
+- 成功标准可判断
+- 面试讲法自然
 
-## 八、任务执行检查清单
+### 8.4 不做无叙事价值的复杂化
 
-AI Agent 在执行任何任务前，请对照此清单：
+如果一个模块更复杂，但不能明显提升以下至少一项，就不优先做：
 
-- [ ] 我的修改是否违反了第一节的硬约束？
-- [ ] 新代码是否放在了正确的目录下？
-- [ ] 是否引入了不在 requirements.txt 中的新依赖？如果是，需说明理由
-- [ ] 训练相关代码是否能在 24GB 显存内运行？
-- [ ] 是否修改了 system prompt 或标签格式？（不允许）
-- [ ] reward 函数是否使用了 SQuAD 标准归一化？
-- [ ] 检索相关代码是否包含超时处理和错误恢复？
-- [ ] 是否添加了适当的日志输出？
-- [ ] 如果是新的训练配置，是否作为 YAML 文件保存在 configs/ 下？
+- baseline 可信度
+- 方法可解释性
+- 实验可归因性
+- 面试讲述质量
 
 ---
 
-## 九、模块开发优先级
+## 9. 修改文档时的统一模板
 
-如果被要求"开始实现项目"，请按以下顺序推进：
+`docs/m1-m7` 默认采用统一结构：
 
-```
-优先级 1（基础设施）：
-  scripts/setup_autodl.sh → requirements.txt → configs/
+1. 本模块回答什么问题
+2. 为什么它对面试重要
+3. 范围与非范围
+4. 关键输出物
+5. 通过标准
+6. 面试讲法
 
-优先级 2（数据层）：
-  data/download_datasets.py → data/preprocess.py → data/curriculum_split.py
-
-优先级 3（检索层）：
-  retrieval/server.py → retrieval/test_retrieval.py
-
-优先级 4（训练层 - SFT）：
-  data/generate_sft_data.py → training/sft_train.py
-
-优先级 5（训练层 - RL 核心）：
-  training/rewards.py → training/utils.py → training/search_env.py → training/grpo_train.py
-
-优先级 6（评测层）：
-  evaluation/metrics.py → evaluation/evaluate.py → evaluation/ablation_runner.py
-```
-
-**每完成一个优先级，先测试验证再进入下一个。不要一次写完所有代码。**
+如果新增章节，优先围绕这六点展开。
 
 ---
 
-## 十、测试验证标准
+## 10. 提交前自检
 
-### 10.1 检索服务器验证
+在完成一项改动前，至少问自己这五个问题：
 
-```bash
-# 启动后运行
-curl -X POST http://127.0.0.1:8000/retrieve \
-  -H "Content-Type: application/json" \
-  -d '{"query": "Albert Einstein birthplace", "topk": 3}'
-# 期望：返回包含 Ulm, Germany 相关内容的 3 条结果
-```
+1. 这个改动让项目更容易讲清楚了吗？
+2. 这个改动让实验链路更容易复现了吗？
+3. 这个改动是在补 baseline，还是在无意义扩展？
+4. 本地和 AutoDL 的职责边界是否依然清楚？
+5. 面试官看到这部分时，能否快速理解它的价值？
 
-### 10.2 SFT 模型验证
-
-SFT 训练后，模型应能生成正确格式的输出：
-```python
-# 输入：任意问题
-# 期望输出：包含 <think>、<search>、<answer> 标签的文本
-# 验证：>90% 的生成包含至少一个 <search> 标签和一个 <answer> 标签
-```
-
-### 10.3 GRPO 训练验证
-
-训练 100 步后检查：
-- reward 均值应 > 0（如果持续为 0，说明有 bug）
-- reward 应有上升趋势（即使缓慢）
-- 模型生成的 `<search>` 查询应与问题相关（抽样检查 5 条）
-
-### 10.4 评测验证
-
-```python
-# HotpotQA dev set 前 100 条
-# 期望 EM > 0.15, F1 > 0.25（SFT 后 baseline）
-# GRPO 训练后期望 EM > 0.25, F1 > 0.35
-```
+如果答案大多是否定的，就先不要继续扩展复杂度。
